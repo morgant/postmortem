@@ -61,6 +61,7 @@ function usage()
 	echo '  init            initialize postmortems directories'
 	echo '  template        open the postmortem template'
 	echo '  today           create and/or open postmortem for today'
+	echo '  email           compose new email in Mail with postmortem for today'
 }
 
 # print version info
@@ -187,6 +188,42 @@ function today()
 	$success
 }
 
+# email a postmortem
+function email()
+{
+	local success=true
+	local postmortem="${postmortems_path}/${year}/${month}/Daily Postmortem-${date}.txt"
+	
+	# does today's daily postmortem exist?
+	if [ ! -e "$postmortem" ]; then
+		echo "ERROR! The file '${postmortem}' doesn't exist! Unable to proceed!"
+		success=false;
+	else
+		# create the message in mail (yes, this is currently Mail-specific via AppleScript)
+		if $verbose; then echo -n "Building new email in Mail with '${postmortem}' as the message body... "; fi
+		local body=$(cat "$postmortem")
+		if ! /usr/bin/osascript - 2>&1 >/dev/null <<-EOS
+			tell application "Mail"
+				set theMessage to make new outgoing message with properties {visible:true, subject:"Daily Postmortem ${date}", content:"${body}"}
+				(*
+				tell theMessage
+					make new to recipient at end of to recipients with properties {address:"somebody@domain.tld"}
+					make new cc recipient at end of cc recipients with properties {address:"somebody.else@domain.tld"}
+				end tell
+				*)
+			end tell
+		EOS
+		then
+			echo "ERROR! An error occurred while trying to control Mail via AppleScript!"
+			success=false
+		else
+			if $verbose; then echo "Done."; fi
+		fi
+	fi
+	
+	$success;
+}
+
 # see if any arguments were passed in
 if [ $# -gt 0 ]; then
 	# if so, step through them all and pre-process them (we do this so we can 
@@ -266,6 +303,9 @@ if [ $# -gt 0 ]; then
 					;;
 				"template")
 					template
+					;;
+				"email")
+					email
 					;;
 				*)
 					echo "$tool: Unknown command '${argv[$i]}'!"
