@@ -1,0 +1,281 @@
+#!/bin/bash
+
+# 
+# postmortem - automate tasks related to my daily postmortem reports
+# 
+# CHANGE LOG:
+# 
+# v0.1   2012-02-01 - Morgan Aldridge <morgant@makkintosshu.com>
+#                     Initial version, based on bash_stub.
+# 
+# LICENSE:
+# 
+# Copyright (c) 2012, Morgan T. Aldridge. All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without 
+# modification, are permitted provided that the following conditions are met:
+# 
+# - Redistributions of source code must retain the above copyright notice, this 
+#   list of conditions and the following disclaimer.
+# - Redistributions in binary form must reproduce the above copyright notice, 
+#   this list of conditions and the following disclaimer in the documentation 
+#   and/or other materials provided with the distribution.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# 
+
+# info
+tool=$(basename "$0")
+version='0.1'
+copyright='Copyright (c) 2012 Morgan T. Aldridge <morgant@makkintosshu.com>'
+
+# global variables
+verbose=false
+
+editor="see"
+postmortems_path="/Users/morgan/Documents/Daily Postmortems"
+template="${postmortems_path}/template.txt"
+
+date=$(date +%Y-%m-%d)
+year=$(date +%Y)
+month=$(date +%m)
+
+# print usage instructions (help)
+function usage()
+{
+	echo "Usage: $tool [options] command"
+	echo '  -h, --help      print these usage instructions'
+	echo '  -v, --verbose   verbose output'
+	echo '  -V, --version   print the version'
+	echo
+	echo 'Commands:'
+	echo '  init            initialize postmortems directories'
+	echo '  template        open the postmortem template'
+	echo '  today           create and/or open postmortem for today'
+}
+
+# print version info
+function version()
+{
+	echo "$tool v$version $copyright"
+}
+
+# initialize postmortem paths
+function init_postmortems()
+{
+	local success=true
+	
+	if $verbose; then echo "Initializing postmortem directories in '${postmortems_path}'..."; fi
+	
+	# does the main postmortems path exist?
+	if [ -d "$postmortems_path" ]; then
+		# does the template file exist?
+		if [ ! -e "$template" ]; then
+			# create an empty template file
+			if $verbose; then echo -n "Creating empty template file '${template}'..."; fi
+			if ! touch "$template"; then
+				echo "ERROR! Unable to create template file '${template}'!"
+				success=false
+			else
+				if $verbose; then echo "Done."; fi
+			fi
+		fi
+		
+		# does the year directory exist?
+		local year_path="${postmortems_path}/${year}"
+		if [ ! -d "$year_path" ]; then
+			# create the year directory
+			if $verbose; then echo -n "Creating year directory '${year_path}'... "; fi
+			if ! mkdir "$year_path"; then
+				echo "ERROR! Unable to create year directory '${year_path}! Unable to proceed!"
+				success=false
+			else
+				if $verbose; then echo "Done."; fi
+			fi
+		fi
+		
+		if $success; then
+			local month_path="${year_path}/${month}"
+			# does the month directory exist?
+			if [ ! -d "$month_path" ]; then
+				# create the month path
+				if $verbose; then echo -n "Creating month directory '${month_path}'... "; fi
+				if ! mkdir "$month_path"; then
+					echo "ERROR! Unable to create month directory '${month_path}'!"
+					success=false
+				else
+					if $verbose; then echo "Done."; fi
+				fi
+			fi
+		fi
+		
+		if $success && $verbose; then echo "Done."; fi
+	else
+		echo "ERROR! Base postmortem directory '${postmortems_path}' doesn't exist! Unable to proceed!"
+		success=false
+	fi
+	
+	$success
+}
+
+# open the template for postmortems
+function template()
+{
+	local success=true
+	
+	# does the template file exist or need to be initialized?
+	if [ ! -e ${template} ]; then
+		if ! init_postmortems; then
+			success=false
+		fi
+	fi
+	
+	# open the template
+	if $success; then
+		if $verbose; then echo "Opening '${template}'..."; fi
+		$editor "$template"
+	fi
+	
+	$success
+}
+
+# create and/or open today's postmortem
+function today()
+{
+	local success=true
+	local month_path="${postmortems_path}/${year}/${month}"
+	local postmortem="${month_path}/Daily Postmortem-${date}.txt"
+	
+	# does the path for this month exist or need to be initialized
+	if [ ! -d "$month_path" ]; then
+		if ! init_postmortems; then
+			success=false;
+		fi
+	fi
+	
+	if $success; then
+		# do we need to create the daily postmortem?
+		if [ ! -e "$postmortem" ]; then
+			# create the daily postmortem
+			if $verbose; then echo -n "Creating postmortem file '${postmortem}'... "; fi
+			if ! cp "$template" "$postmortem"; then
+				echo "ERROR! Unable to copy template to new file '${postmortem}'!"
+				success=false
+			else
+				if $verbose; then echo "Done."; fi
+			fi
+		fi
+		
+		# open the postmortem
+		if $success; then
+			if $verbose; then echo "Opening '${postmortem}'..."; fi
+			$editor "$postmortem"
+		fi	
+	else
+		echo "ERROR! Something went wrong while initializing the postmortems paths! Unable to continue!"
+	fi
+	
+	$success
+}
+
+# see if any arguments were passed in
+if [ $# -gt 0 ]; then
+	# if so, step through them all and pre-process them (we do this so we can 
+	# support multiple options specified together, e.g.: -abc vs. -a -b -c),
+	# GNU-style long options with alternate style values, and for easier
+	# actual handling
+	argv=()
+	while [ $# -gt 0 ]; do
+		# is this an option (e.g. starts with a dash) or an argument?
+		if [ "${1:0:1}" = "-" ]; then
+			# is it a GNU-style long option (e.g. starts with a double-dash)?
+			if [ "${1:0:2}" = "--" ]; then
+				# push the option (everything before an equals) onto argv
+				argv=("${argv[@]}" "${1%%=*}")
+				
+				# is it the alternate "--long-opt=value" format? if so, make it
+				# "--long-opt value" format buy pushing the value (everything after the
+				# equals) on as a separate argument
+				case "$1" in *=*)
+					argv=("${argv[@]}" "${1##*=}") ;;
+				esac
+			# otherwise, is it multiple single options specified together?
+			elif [ ${#1} -gt 2 ]; then
+				tmp="$1"
+				# push each onto argv as single options
+				for (( i=1; i < ${#tmp}; i++ )); do
+					argv=("${argv[@]}" "-${tmp:$i:1}")
+				done
+			# otherwise, it must be a single option so just push it onto argv
+			else
+				argv=("${argv[@]}" "$1")
+			fi
+			shift
+		# arguments just get pushed onto argv in order too
+		else
+			argv=("${argv[@]}" "$1")
+			shift
+		fi
+	done
+	argc=${#argv[@]}
+		
+	# now that we've pre-processed the options, go through them all for real
+	for (( i=0; i<$argc; i++ )); do
+		# is this an option (e.g. starts with a dash) or an argument?
+		if [ "${argv[$i]:0:1}" = "-" ]; then
+			case "${argv[$i]}" in
+				# see if the user intended us to run in verbose mode
+				"-v" | "--verbose")
+					verbose=true
+					;;
+				# see if the user requested help
+				"-h" | "--help")
+					usage
+					exit
+					;;
+				# see if the user requested the version
+				"-V" | "--version")
+					version
+					exit
+					;;
+				# handle other options
+			
+				# unknown option
+				*)
+					echo "$tool: Unknown option '$1'!"
+					exit 1
+					;;
+			esac
+		# handle arguments
+		else
+			case "${argv[$i]}" in
+				"init")
+					init_postmortems
+					;;
+				"today")
+					today
+					;;
+				"template")
+					template
+					;;
+				*)
+					echo "$tool: Unknown command '${argv[$i]}'!"
+					exit 1
+					;;
+			esac
+		fi
+	done
+else
+	echo "No options or arguments were specified!"$'\n'
+	usage
+	exit 1
+fi
