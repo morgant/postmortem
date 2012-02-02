@@ -134,7 +134,7 @@ function template()
 	local success=true
 	
 	# does the template file exist or need to be initialized?
-	if [ ! -e ${template} ]; then
+	if [ ! -e "${template}" ]; then
 		if ! init_postmortems; then
 			success=false
 		fi
