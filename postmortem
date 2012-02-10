@@ -7,6 +7,9 @@
 # 
 # v0.1   2012-02-01 - Morgan Aldridge <morgant@makkintosshu.com>
 #                     Initial version, based on bash_stub.
+# v0.2   2012-02-10 - Morgan Aldridge
+#                     Support for user-specific config file. Builds email
+#                     recipients from config values.
 # 
 # LICENSE:
 # 
@@ -35,15 +38,21 @@
 
 # info
 tool=$(basename "$0")
-version='0.1'
+version='0.2'
 copyright='Copyright (c) 2012 Morgan T. Aldridge <morgant@makkintosshu.com>'
 
 # global variables
 verbose=false
 
-editor="see"
+editor="vi"
 postmortems_path="/Users/morgan/Documents/Daily Postmortems"
 template="${postmortems_path}/template.txt"
+config="${HOME}/.postmortem"
+
+# include the user's personalized config, if it exists
+if [ -f "$config" ]; then
+	source "$config"
+fi
 
 date=$(date +%Y-%m-%d)
 year=$(date +%Y)
@@ -52,16 +61,27 @@ month=$(date +%m)
 # print usage instructions (help)
 function usage()
 {
-	echo "Usage: $tool [options] command"
-	echo '  -h, --help      print these usage instructions'
-	echo '  -v, --verbose   verbose output'
-	echo '  -V, --version   print the version'
-	echo
-	echo 'Commands:'
-	echo '  init            initialize postmortems directories'
-	echo '  template        open the postmortem template'
-	echo '  today           create and/or open postmortem for today'
-	echo '  email           compose new email in Mail with postmortem for today'
+	cat <<-EOM
+	Usage: $tool [options] command
+	  -h, --help        print these usage instructions
+	  -v, --verbose     verbose output
+	  -V, --version     print the version
+	
+	Commands:
+	  init              initialize postmortems directories
+	  template          open the postmortem template
+	  today             create and/or open postmortem for today
+	  email             compose new email in Mail with postmortem for today
+	
+	Configuration:
+	  A configuration file can be created at ~/.postmortem which sets one or more
+	  of the following variables:
+	
+	  editor            command to be run to edit template & postmortems
+	  postmortems_path  path where postmortems should be stored & managed
+	  email_to          array of addresses to put in email to: field
+	  email_cc          array of addresses to put in email cc: field
+	EOM
 }
 
 # print version info
@@ -199,18 +219,27 @@ function email()
 		echo "ERROR! The file '${postmortem}' doesn't exist! Unable to proceed!"
 		success=false;
 	else
+		# build the applescript commands to set email recipients (since this is dynamic
+		# we need to do it prior to running the script)
+		recipients_clause=''
+		if [[ ( -n "${email_to[@]}" ) || ( -n "${email_cc[@]}" ) ]]; then
+			recipients_clause="tell theMessage"$'\n'
+			for address in "${email_to[@]}"; do
+				recipients_clause="${recipients_clause}make new to recipient at end of to recipients with properties{address:\"${address}\"}"$'\n'
+			done
+			for address in "${email_cc[@]}"; do
+				recipients_clause="${recipients_clause}make new cc recipient at end of cc recipients with properties{address:\"${address}\"}"$'\n'
+			done
+			recipients_clause="${recipients_clause}end tell"$'\n'
+		fi
+		
 		# create the message in mail (yes, this is currently Mail-specific via AppleScript)
 		if $verbose; then echo -n "Building new email in Mail with '${postmortem}' as the message body... "; fi
 		local body=$(cat "$postmortem")
 		if ! /usr/bin/osascript - 2>&1 >/dev/null <<-EOS
 			tell application "Mail"
 				set theMessage to make new outgoing message with properties {visible:true, subject:"Daily Postmortem ${date}", content:"${body}"}
-				(*
-				tell theMessage
-					make new to recipient at end of to recipients with properties {address:"somebody@domain.tld"}
-					make new cc recipient at end of cc recipients with properties {address:"somebody.else@domain.tld"}
-				end tell
-				*)
+				${recipients_clause}
 			end tell
 		EOS
 		then
