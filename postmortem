@@ -10,6 +10,8 @@
 # v0.2   2012-02-10 - Morgan Aldridge
 #                     Support for user-specific config file. Builds email
 #                     recipients from config values.
+# v0.2.1 2012-05-29 - Morgan Aldridge
+#                     Properly escape quotes in email message body.
 # 
 # LICENSE:
 # 
@@ -235,7 +237,7 @@ function email()
 		
 		# create the message in mail (yes, this is currently Mail-specific via AppleScript)
 		if $verbose; then echo -n "Building new email in Mail with '${postmortem}' as the message body... "; fi
-		local body=$(cat "$postmortem")
+		local body=$(cat "$postmortem" | sed -E "s/\"/\\\\\"/g")
 		if ! /usr/bin/osascript - 2>&1 >/dev/null <<-EOS
 			tell application "Mail"
 				set theMessage to make new outgoing message with properties {visible:true, subject:"Daily Postmortem ${date}", content:"${body}"}
