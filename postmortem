@@ -15,6 +15,9 @@
 # v0.3   2012-12-04 - Morgan Aldridge
 #                     Now brings Mail to front & converts message to plain text.
 #                     Supports specifying past date of postmortem to email.
+# v0.4   2013-02-05 - Morgan Aldridge
+#                     Support for calculating hours worked for any number of
+#                     days past.
 # 
 # LICENSE:
 # 
@@ -43,7 +46,7 @@
 
 # info
 tool=$(basename "$0")
-version='0.3'
+version='0.4'
 copyright='Copyright (c) 2012 Morgan T. Aldridge <morgant@makkintosshu.com>'
 
 # global variables
@@ -78,6 +81,7 @@ function usage()
 	  today             create and/or open postmortem for today
 	  email [date]      compose new email in Mail with postmortem for today (accepts
 	                      optional date: 'yesterday' or 'YYYY-MM-DD' formatted)
+	  hours [days]      calculate hours worked for past number of days (default: 7)
 	
 	Configuration:
 	  A configuration file can be created at ~/.postmortem which sets one or more
@@ -289,6 +293,90 @@ function parse_date_param()
 	$success
 }
 
+# convert time (hours, minutes, a/p) to minutes
+function time_to_mins() {
+	local hours="$1"
+	local minutes="$2"
+	local am_pm="$3"
+	
+	# am?
+	if [ "$am_pm" = "a" ]; then
+		minutes=$(( ( $hours * 60 ) + 10#$minutes ))
+	# pm?
+	elif [ "$am_pm" = "p" ]; then
+		minutes=$(( ( ( 12 + 10#$hours ) * 60 ) + 10#$minutes ))
+	fi
+	
+	echo $minutes
+}
+
+# calculate hours worked during past n days
+function hours()
+{
+	local success=true
+	local days="$1"
+	local total_mins_worked=0
+	
+	# calculate hours worked for the past week
+	local i
+	for (( i=1; i<=days; i++ )); do
+		# build the path to the date's postmortem
+		date="$(date -j -v-${i}d +%Y-%m-%d)"
+		year="$(date -j -v-${i}d +%Y)"
+		month="$(date -j -v-${i}d +%m)"
+		local postmortem="${postmortems_path}/${year}/${month}/Daily Postmortem-${date}.txt"
+		
+		# does the postmortem exist for that day?
+		if [ -e "$postmortem" ]; then
+			local minutes_worked=0
+			local line
+			local start_time
+			
+			# read the postmortem line-by-line
+			while read -r line; do
+				# match lines that are start times
+				if [[ "$line" =~ (Start|Arrival)\ Time:[\ \	]+([0-9]+):([0-9]{2})\ ?(a|p)m ]]; then
+					# calculate start time in minutes
+					start_time="$(time_to_mins ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]})"
+					#echo "START TIME: $start_time minutes"
+				# match lines that are end times
+				elif [[ "$line" =~ (Stop|Departure)\ Time:[\ \	]+([0-9]+):([0-9]{2})\ ?(a|p)m ]]; then
+					# calculate stop time in minutes
+					local stop_time="$(time_to_mins ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]})"
+					#echo "STOP TIME: $stop_time minutes"
+					# add total minutes worked (stop time - start time) & reset the start time
+					minutes_worked=$(( $minutes_worked + ( $stop_time - $start_time ) ))
+					start_time=0;
+				# match lines that are breaks
+				elif [[ "$line" =~ Lunch\/Breaks:[\ \	]+(([0-9]+):)?([0-9]{2})\ ?min.* ]]; then
+					local break_time
+					if [ -z "${BASH_REMATCH[2]}" ]; then
+						break_time="$(time_to_mins 0 ${BASH_REMATCH[3]} a)"
+					else
+						break_time="$(time_to_mins ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} a)"
+					fi
+					#echo "BREAK TIME: $break_time minutes"
+					
+					# subtract break time from total minutes worked
+					minutes_worked=$(( $minutes_worked - $break_time ))
+				fi
+			done < "$postmortem"
+			
+			# add the minutes worked to the running total
+			total_mins_worked=$(( $total_mins_worked + $minutes_worked ))
+			if $verbose; then
+				printf "%s: %02i:%02i\n" "$date" "$(( $minutes_worked / 60 ))" "$(( $minutes_worked % 60 ))"
+			fi
+		elif $verbose; then
+			echo "$date: n/a"
+		fi
+	done
+	
+	printf "Total Hours Worked (past %i days): %02i:%02i\n" "$days" "$(( $total_mins_worked / 60 ))" "$(( $total_mins_worked % 60 ))"
+	
+	$success
+}
+
 # see if any arguments were passed in
 if [ $# -gt 0 ]; then
 	# if so, step through them all and pre-process them (we do this so we can 
@@ -377,6 +465,14 @@ if [ $# -gt 0 ]; then
 						fi
 					fi
 					email
+					;;
+				"hours")
+				    (( i++ ))
+				    if [ -n "${argv[$i]}" ]; then
+				    	hours "${argv[$i]}"
+				   	else
+						hours 7
+					fi
 					;;
 				*)
 					echo "$tool: Unknown command '${argv[$i]}'!"
