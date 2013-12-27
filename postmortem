@@ -18,6 +18,9 @@
 # v0.4   2013-02-05 - Morgan Aldridge
 #                     Support for calculating hours worked for any number of
 #                     days past.
+# v0.5   2013-12-27 - Morgan Aldridge
+#                     Support for finding all issues worked on for any number of
+#                     days past.
 # 
 # LICENSE:
 # 
@@ -46,8 +49,8 @@
 
 # info
 tool=$(basename "$0")
-version='0.4'
-copyright='Copyright (c) 2012 Morgan T. Aldridge <morgant@makkintosshu.com>'
+version='0.5'
+copyright='Copyright (c) 2012-2014 Morgan T. Aldridge <morgant@makkintosshu.com>'
 
 # global variables
 verbose=false
@@ -82,6 +85,7 @@ function usage()
 	  email [date]      compose new email in Mail with postmortem for today (accepts
 	                      optional date: 'yesterday' or 'YYYY-MM-DD' formatted)
 	  hours [days]      calculate hours worked for past number of days (default: 7)
+	  issues [days]     output list of issues referenced for past number of days (default: 7)
 	
 	Configuration:
 	  A configuration file can be created at ~/.postmortem which sets one or more
@@ -98,6 +102,27 @@ function usage()
 function version()
 {
 	echo "$tool v$version $copyright"
+}
+
+# 
+# in_array() - determine whether a value is contained in an array
+# 
+# @param string The value which you're checking if exists in the array.
+# @param mixed The array in which you're checking for the value.
+# @returns 0 (true) if the value was found in the array, otherwise 1 (false).
+# 
+function in_array() {
+	local found=false
+	local value="$1"
+	shift
+	
+	if [ -z "$value" ]; then $found; fi
+	if [ ${#@} -lt 1 ]; then $found; fi
+	for array_value in "$@"; do
+		if [ "$value" = "$array_value" ]; then found=true; fi
+	done
+	
+	$found
 }
 
 # initialize postmortem paths
@@ -377,6 +402,53 @@ function hours()
 	$success
 }
 
+# find all issues worked on during past n days
+function issues()
+{
+	local success=true
+	local days="$1"
+	local issues=()
+	
+	# find all the issues all the issues worked on for the specified number of days
+	local i
+	for (( i=1; i<=days; i++ )); do
+		# build the path to the date's postmortem
+		date="$(date -j -v-${i}d +%Y-%m-%d)"
+		year="$(date -j -v-${i}d +%Y)"
+		month="$(date -j -v-${i}d +%m)"
+		local postmortem="${postmortems_path}/${year}/${month}/Daily Postmortem-${date}.txt"
+		
+		# does the postmortem exist for that day?
+		if [ -e "$postmortem" ]; then
+			local line
+			
+			# read the postmortem line-by-line & word-by-word (because bash's regexp doesn't support global matches)
+			while read -r line; do
+				for word in "${line[@]}"; do
+					# match issue numbers (numbers preceded by a pound/hash symbol)
+					if [[ "$word" =~ \#([0-9]+) ]]; then
+						local j
+						for (( j=1; j<${#BASH_REMATCH[*]}; j++ )); do
+							#if $verbose; then echo "ISSUE: ${BASH_REMATCH[$j]}"; fi
+							if ! in_array "${BASH_REMATCH[$j]}" "${issues[@]}"; then
+								issues+=("${BASH_REMATCH[$j]}")
+								#if $verbose; then echo "ISSUES: ${issues[@]}"; fi
+							fi
+						done
+					fi
+				done
+			done < "$postmortem"
+		fi
+	done
+	
+	echo "Issues Worked On (past $days days):"
+	for issue in "${issues[@]}"; do
+		echo "  $issue"
+	done
+	
+	$success;
+}
+
 # see if any arguments were passed in
 if [ $# -gt 0 ]; then
 	# if so, step through them all and pre-process them (we do this so we can 
@@ -472,6 +544,14 @@ if [ $# -gt 0 ]; then
 				    	hours "${argv[$i]}"
 				   	else
 						hours 7
+					fi
+					;;
+				"issues")
+					(( i++ ))
+					if [ -n "${argv[$i]}" ]; then
+						issues "${argv[$i]}"
+					else
+						issues 7
 					fi
 					;;
 				*)
