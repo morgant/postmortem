@@ -20,7 +20,8 @@
 #                     days past.
 # v0.5   2013-12-27 - Morgan Aldridge
 #                     Support for finding all issues worked on for any number of
-#                     days past.
+#                     days past. New option to include today in hours/issues
+#                     calculations/reporting.
 # 
 # LICENSE:
 # 
@@ -54,6 +55,7 @@ copyright='Copyright (c) 2012-2014 Morgan T. Aldridge <morgant@makkintosshu.com>
 
 # global variables
 verbose=false
+include_today=false
 
 editor="vi"
 postmortems_path="/Users/morgan/Documents/Daily Postmortems"
@@ -74,27 +76,28 @@ function usage()
 {
 	cat <<-EOM
 	Usage: $tool [options] command
-	  -h, --help        print these usage instructions
-	  -v, --verbose     verbose output
-	  -V, --version     print the version
+	  -h, --help           print these usage instructions
+	  -v, --verbose        verbose output
+	  -V, --version        print the version
+	  -T, --include-today  include today in hours/issues reporting
 	
 	Commands:
-	  init              initialize postmortems directories
-	  template          open the postmortem template
-	  today             create and/or open postmortem for today
-	  email [date]      compose new email in Mail with postmortem for today (accepts
-	                      optional date: 'yesterday' or 'YYYY-MM-DD' formatted)
-	  hours [days]      calculate hours worked for past number of days (default: 7)
-	  issues [days]     output list of issues referenced for past number of days (default: 7)
+	  init                 initialize postmortems directories
+	  template             open the postmortem template
+	  today                create and/or open postmortem for today
+	  email [date]         compose new email in Mail with postmortem for today (accepts
+	                         optional date: 'yesterday' or 'YYYY-MM-DD' formatted)
+	  hours [days]         calculate hours worked for past number of days (default: 7)
+	  issues [days]        output list of issues referenced for past number of days (default: 7)
 	
 	Configuration:
 	  A configuration file can be created at ~/.postmortem which sets one or more
 	  of the following variables:
 	
-	  editor            command to be run to edit template & postmortems
-	  postmortems_path  path where postmortems should be stored & managed
-	  email_to          array of addresses to put in email to: field
-	  email_cc          array of addresses to put in email cc: field
+	  editor               command to be run to edit template & postmortems
+	  postmortems_path     path where postmortems should be stored & managed
+	  email_to             array of addresses to put in email to: field
+	  email_cc             array of addresses to put in email cc: field
 	EOM
 }
 
@@ -344,7 +347,13 @@ function hours()
 	
 	# calculate hours worked for the past week
 	local i
-	for (( i=1; i<=days; i++ )); do
+	local i_start=1
+	local i_end="$days"
+	if $include_today; then
+		i_start=0
+		i_end=$(( days - 1 ))
+	fi
+	for (( i=i_start; i<=i_end; i++ )); do
 		# build the path to the date's postmortem
 		date="$(date -j -v-${i}d +%Y-%m-%d)"
 		year="$(date -j -v-${i}d +%Y)"
@@ -411,7 +420,13 @@ function issues()
 	
 	# find all the issues all the issues worked on for the specified number of days
 	local i
-	for (( i=1; i<=days; i++ )); do
+	local i_start=1
+	local i_end="$days"
+	if $include_today; then
+		i_start=0
+		i_end=$(( days - 1 ))
+	fi
+	for (( i=i_start; i<=i_end; i++ )); do
 		# build the path to the date's postmortem
 		date="$(date -j -v-${i}d +%Y-%m-%d)"
 		year="$(date -j -v-${i}d +%Y)"
@@ -508,6 +523,10 @@ if [ $# -gt 0 ]; then
 				"-V" | "--version")
 					version
 					exit
+					;;
+				# see if the user requested to include today in reporting
+				"-T" | "--include-today")
+					include_today=true
 					;;
 				# handle other options
 			
