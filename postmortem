@@ -22,6 +22,8 @@
 #                     Support for finding all issues worked on for any number of
 #                     days past. New option to include today in hours/issues
 #                     calculations/reporting.
+# v0.6   2015-06-02 - Morgan Aldridge
+#                     Support for opening previous day's postmortem.
 # 
 # LICENSE:
 # 
@@ -50,8 +52,8 @@
 
 # info
 tool=$(basename "$0")
-version='0.5'
-copyright='Copyright (c) 2012-2014 Morgan T. Aldridge <morgant@makkintosshu.com>'
+version='0.6'
+copyright='Copyright (c) 2012-2015 Morgan T. Aldridge <morgant@makkintosshu.com>'
 
 # global variables
 verbose=false
@@ -67,9 +69,9 @@ if [ -f "$config" ]; then
 	source "$config"
 fi
 
-date=$(date +%Y-%m-%d)
-year=$(date +%Y)
-month=$(date +%m)
+date="$(date +%Y-%m-%d)"
+year="$(date +%Y)"
+month="$(date +%m)"
 
 # print usage instructions (help)
 function usage()
@@ -85,6 +87,7 @@ function usage()
 	  init                 initialize postmortems directories
 	  template             open the postmortem template
 	  today                create and/or open postmortem for today
+	  yesterday            create and/or open postmortem for yesterday
 	  email [date]         compose new email in Mail with postmortem for today (accepts
 	                         optional date: 'yesterday' or 'YYYY-MM-DD' formatted)
 	  hours [days]         calculate hours worked for past number of days (default: 7)
@@ -209,6 +212,22 @@ function template()
 
 # create and/or open today's postmortem
 function today()
+{
+	open_postmortem
+}
+
+# create and/or open yesterday's postmortem
+function yesterday()
+{
+	date="$(date -j -v-1d +%Y-%m-%d)"
+	year="$(date -j -v-1d +%Y)"
+	month="$(date -j -v-1d +%m)"
+	
+	open_postmortem
+}
+
+# create and/or open a day's postmortem
+function open_postmortem()
 {
 	local success=true
 	local month_path="${postmortems_path}/${year}/${month}"
@@ -544,6 +563,9 @@ if [ $# -gt 0 ]; then
 					;;
 				"today")
 					today
+					;;
+				"yesterday")
+					yesterday
 					;;
 				"template")
 					template
