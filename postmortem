@@ -24,6 +24,9 @@
 #                     calculations/reporting.
 # v0.6   2015-06-02 - Morgan Aldridge
 #                     Support for opening previous day's postmortem.
+# v0.6.1 2016-07-14 - Morgan Aldridge
+#                     Minor fix to template file path when 'postmortems_path' is
+#                     specified via config file.
 # 
 # LICENSE:
 # 
@@ -61,13 +64,14 @@ include_today=false
 
 editor="vi"
 postmortems_path="/Users/morgan/Documents/Daily Postmortems"
-template="${postmortems_path}/template.txt"
 config="${HOME}/.postmortem"
 
 # include the user's personalized config, if it exists
 if [ -f "$config" ]; then
 	source "$config"
 fi
+
+template="${postmortems_path}/template.txt"
 
 date="$(date +%Y-%m-%d)"
 year="$(date +%Y)"
